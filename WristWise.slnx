@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WristWise.API/WristWise.API.csproj" />
+  </Folder>
+</Solution>
