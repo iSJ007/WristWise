@@ -64,5 +64,7 @@ if (!app.Environment.IsDevelopment())
 app.MapAuthEndpoints();
 app.MapAdminEndpoints();
 app.MapWatchEndpoints();
+app.MapReviewEndpoints();
+app.MapWishlistEndpoints();
 
 app.Run();
