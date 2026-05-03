@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import StarRating from '../components/StarRating';
 import { getWatchById } from '../api/watches';
 import { getReviews, createReview, deleteReview } from '../api/reviews';
@@ -11,10 +11,13 @@ export default function WatchDetailPage() {
   const { id } = useParams<{ id: string }>();
   const watchId = Number(id);
   const { user, token } = useAuth();
+  const navigate = useNavigate();
 
   const [watch, setWatch] = useState<WatchDetail | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [wishlisted, setWishlisted] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const [toast, setToast] = useState('');
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -29,12 +32,30 @@ export default function WatchDetailPage() {
   }, [watchId]);
 
   async function toggleWishlist() {
-    if (wishlisted) {
-      await removeFromWishlist(watchId);
-    } else {
-      await addToWishlist(watchId);
+    if (!token) {
+      navigate('/login');
+      return;
     }
-    setWishlisted(w => !w);
+    setToggling(true);
+    try {
+      if (wishlisted) {
+        await removeFromWishlist(watchId);
+        showToast('Removed from wishlist');
+      } else {
+        await addToWishlist(watchId);
+        showToast('Added to wishlist!');
+      }
+      setWishlisted(w => !w);
+    } catch {
+      showToast('Something went wrong.');
+    } finally {
+      setToggling(false);
+    }
+  }
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(''), 2500);
   }
 
   async function handleSubmitReview(e: React.SyntheticEvent) {
@@ -64,6 +85,11 @@ export default function WatchDetailPage() {
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-10">
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5 py-3 rounded-xl shadow-lg z-50 transition-all">
+          {toast}
+        </div>
+      )}
       {/* Header */}
       <div className="mb-8">
         <div className="bg-gray-50 rounded-2xl flex items-center justify-center p-8 mb-6">
@@ -89,18 +115,19 @@ export default function WatchDetailPage() {
               </span>
             </div>
           </div>
-          {token && (
-            <button
-              onClick={toggleWishlist}
-              className={`shrink-0 px-4 py-2 rounded-xl border text-sm font-medium transition ${
-                wishlisted
-                  ? 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {wishlisted ? '★ Wishlisted' : '☆ Add to Wishlist'}
-            </button>
-          )}
+          <button
+            onClick={toggleWishlist}
+            disabled={toggling}
+            className={`shrink-0 px-4 py-2 rounded-xl border text-sm font-medium transition-all duration-200 active:scale-95 ${
+              toggling ? 'opacity-60 scale-95' : 'scale-100'
+            } ${
+              wishlisted
+                ? 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {toggling ? '...' : wishlisted ? '★ Wishlisted' : '☆ Add to Wishlist'}
+          </button>
         </div>
       </div>
 
@@ -190,7 +217,8 @@ export default function WatchDetailPage() {
                 className="bg-white rounded-xl border border-gray-100 shadow-sm p-5"
               >
                 <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <img src="/user.png" alt={review.username} className="h-8 w-8 rounded-full object-cover" />
                     <span className="font-semibold text-gray-800 text-sm">{review.username}</span>
                     <StarRating rating={review.rating} />
                   </div>

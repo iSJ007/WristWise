@@ -13,6 +13,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     throw new Error(text || res.statusText);
   }
 
-  if (res.status === 204) return null as T;
-  return res.json();
+  // Read as text first to safely handle empty bodies (e.g. 201 with no content)
+  const text = await res.text();
+  return text ? JSON.parse(text) : (null as T);
 }
