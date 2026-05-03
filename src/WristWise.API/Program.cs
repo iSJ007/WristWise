@@ -27,7 +27,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireClaim("IsAdmin", "true"));
+});
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddOpenApi();
 
@@ -43,6 +47,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+    await DataSeeder.SeedAdminAsync(db, app.Configuration);
     await DataSeeder.SeedWatchesAsync(db, app.Configuration);
 }
 
@@ -52,8 +57,12 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseHttpsRedirection();
+
+if (!app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
 
 app.MapAuthEndpoints();
+app.MapAdminEndpoints();
+app.MapWatchEndpoints();
 
 app.Run();

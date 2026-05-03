@@ -1,6 +1,48 @@
-@WristWise.API_HostAddress = http://localhost:5287
+@host = http://localhost:5287
 
-GET {{WristWise.API_HostAddress}}/weatherforecast/
-Accept: application/json
+### Register a new user
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@wristwise.com",
+  "password": "Test@1234"
+}
 
 ###
+
+### Login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@wristwise.com",
+  "password": "Admin@1234"
+}
+
+###
+
+### Browse watches (page 1)
+GET {{host}}/api/watches?page=1&pageSize=20
+
+###
+
+### Search watches
+GET {{host}}/api/watches/search?q=rolex
+
+###
+
+### Get a single watch by ID
+GET {{host}}/api/watches/1
+
+###
+
+### Reset a user's password (admin only — replace TOKEN and USER_ID)
+PUT {{host}}/api/admin/users/2/reset-password
+Content-Type: application/json
+Authorization: Bearer TOKEN
+
+{
+  "newPassword": "NewPass@1234"
+}

@@ -1,12 +1,33 @@
 using System.Globalization;
 using CsvHelper;
 using CsvHelper.Configuration;
+using Microsoft.EntityFrameworkCore;
 using WristWise.API.Models;
 
 namespace WristWise.API.Data;
 
 public static class DataSeeder
 {
+    public static async Task SeedAdminAsync(AppDbContext db, IConfiguration config)
+    {
+        var email = config["AdminSeed:Email"]!;
+
+        if (await db.Users.AnyAsync(u => u.Email == email)) return;
+
+        var admin = new User
+        {
+            Username = config["AdminSeed:Username"]!,
+            Email = email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(config["AdminSeed:Password"]),
+            IsAdmin = true,
+        };
+
+        db.Users.Add(admin);
+        await db.SaveChangesAsync();
+
+        Console.WriteLine($"Admin user created: {admin.Email}");
+    }
+
     public static async Task SeedWatchesAsync(AppDbContext db, IConfiguration config)
     {
         if (db.Watches.Any()) return;
@@ -34,7 +55,7 @@ public static class DataSeeder
             return Path.Combine(configPath, "Watches.csv");
 
         return Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "../../../../data/Watches.csv"));
+            Path.Combine(AppContext.BaseDirectory, "../../../../../data/Watches.csv"));
     }
 
     private static List<Watch> ReadWatchesFromCsv(string csvPath)
