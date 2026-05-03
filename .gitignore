@@ -1,0 +1,26 @@
+# .NET build output
+bin/
+obj/
+
+# .NET local files
+*.user
+.vs/
+*.db
+*.db-shm
+*.db-wal
+
+# Node / frontend
+node_modules/
+dist/
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+.env.local
+appsettings.Production.json
+
+# OS
+.DS_Store
+Thumbs.db
