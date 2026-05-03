@@ -6,7 +6,6 @@ public class Watch
 
     // Basic identity
     public string Brand { get; set; } = string.Empty;
-    public string Family { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Reference { get; set; } = string.Empty;
 
