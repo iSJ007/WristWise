@@ -8,8 +8,15 @@ using WristWise.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    if (builder.Environment.IsDevelopment())
+        options.UseSqlite(connectionString);
+    else
+        options.UseNpgsql(connectionString);
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

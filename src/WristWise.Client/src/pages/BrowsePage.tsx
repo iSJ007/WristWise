@@ -9,33 +9,44 @@ export default function BrowsePage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const pageSize = 20;
 
   // Load paginated watches when not searching
   useEffect(() => {
     if (query) return;
     setLoading(true);
+    setError('');
     getWatches(page, pageSize)
       .then(data => {
         setWatches(data.watches);
         setTotal(data.total);
       })
+      .catch(() => setError('Failed to load watches. Please try again.'))
       .finally(() => setLoading(false));
   }, [page, query]);
 
-  // Debounced search
+  // Debounced search with AbortController to cancel stale requests
   useEffect(() => {
     if (!query) return;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       setLoading(true);
-      searchWatches(query)
+      setError('');
+      searchWatches(query, controller.signal)
         .then(data => {
           setWatches(data);
           setTotal(data.length);
         })
+        .catch(err => {
+          if (err.name !== 'AbortError') setError('Search failed. Please try again.');
+        })
         .finally(() => setLoading(false));
     }, 350);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
 
   function handleQueryChange(value: string) {
@@ -58,7 +69,9 @@ export default function BrowsePage() {
         />
       </div>
 
-      {loading ? (
+      {error ? (
+        <p className="text-red-500 text-sm">{error}</p>
+      ) : loading ? (
         <p className="text-gray-400">Loading...</p>
       ) : watches.length === 0 ? (
         <p className="text-gray-400">No watches found.</p>

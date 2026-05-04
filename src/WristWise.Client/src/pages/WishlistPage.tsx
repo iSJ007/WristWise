@@ -9,6 +9,7 @@ export default function WishlistPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!token) {
@@ -17,12 +18,17 @@ export default function WishlistPage() {
     }
     getWishlist()
       .then(setItems)
+      .catch(() => setError('Failed to load wishlist.'))
       .finally(() => setLoading(false));
   }, [token, navigate]);
 
   async function handleRemove(watchId: number) {
-    await removeFromWishlist(watchId);
-    setItems(prev => prev.filter(i => i.watchId !== watchId));
+    try {
+      await removeFromWishlist(watchId);
+      setItems(prev => prev.filter(i => i.watchId !== watchId));
+    } catch {
+      setError('Failed to remove watch. Please try again.');
+    }
   }
 
   if (loading) return <p className="text-gray-400 p-10">Loading...</p>;
@@ -30,6 +36,8 @@ export default function WishlistPage() {
   return (
     <main className="max-w-3xl mx-auto px-6 py-10">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">My Wishlist</h1>
+
+      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
 
       {items.length === 0 ? (
         <div className="text-center py-16">

@@ -14,6 +14,7 @@ export default function WatchDetailPage() {
   const navigate = useNavigate();
 
   const [watch, setWatch] = useState<WatchDetail | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [wishlisted, setWishlisted] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -24,10 +25,12 @@ export default function WatchDetailPage() {
   const [reviewError, setReviewError] = useState('');
 
   useEffect(() => {
-    getWatchById(watchId).then(data => {
-      setWatch(data);
-      setWishlisted(data.isWishlisted);
-    });
+    getWatchById(watchId)
+      .then(data => {
+        setWatch(data);
+        setWishlisted(data.isWishlisted);
+      })
+      .catch(() => setLoadError('Watch not found or failed to load.'));
     getReviews(watchId).then(setReviews);
   }, [watchId]);
 
@@ -75,21 +78,27 @@ export default function WatchDetailPage() {
   }
 
   async function handleDeleteReview(reviewId: number) {
-    await deleteReview(reviewId);
-    setReviews(prev => prev.filter(r => r.id !== reviewId));
+    try {
+      await deleteReview(reviewId);
+      setReviews(prev => prev.filter(r => r.id !== reviewId));
+    } catch {
+      showToast('Failed to delete review.');
+    }
   }
 
   const hasReviewed = reviews.some(r => r.username === user?.username);
 
+  if (loadError) return <p className="text-red-500 p-10">{loadError}</p>;
   if (!watch) return <p className="text-gray-400 p-10">Loading...</p>;
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-10">
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5 py-3 rounded-xl shadow-lg z-50 transition-all">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5 py-3 rounded-xl shadow-lg z-50">
           {toast}
         </div>
       )}
+
       {/* Header */}
       <div className="mb-8">
         <div className="bg-gray-50 rounded-2xl flex items-center justify-center p-8 mb-6">
@@ -189,18 +198,23 @@ export default function WatchDetailPage() {
               </div>
             </div>
             <textarea
+              id="comment"
               value={comment}
               onChange={e => setComment(e.target.value)}
               placeholder="Share your thoughts on this watch..."
               rows={3}
               required
+              maxLength={500}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
             />
-            {reviewError && <p className="text-red-500 text-sm mt-2">{reviewError}</p>}
+            <div className="flex items-center justify-between mt-1 mb-2">
+              {reviewError && <p className="text-red-500 text-sm">{reviewError}</p>}
+              <span className="text-xs text-gray-400 ml-auto">{comment.length}/500</span>
+            </div>
             <button
               type="submit"
               disabled={submitting}
-              className="mt-3 bg-gray-900 text-white px-5 py-2 rounded-lg text-sm hover:bg-gray-700 transition disabled:opacity-50"
+              className="bg-gray-900 text-white px-5 py-2 rounded-lg text-sm hover:bg-gray-700 transition disabled:opacity-50"
             >
               {submitting ? 'Submitting...' : 'Submit Review'}
             </button>

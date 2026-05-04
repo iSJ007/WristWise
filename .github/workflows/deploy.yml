@@ -1,0 +1,105 @@
+name: Deploy
+
+# Runs on every push to main — this is the only branch that deploys
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Step 1: Get the code ───────────────────────────────────────────────
+      # Checks out the repo so the rest of the steps can see the files
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Step 2: AWS credentials ────────────────────────────────────────────
+      # Configures the AWS CLI using the keys stored in GitHub Secrets.
+      # Every step after this one can talk to AWS.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Step 3: Log in to ECR ──────────────────────────────────────────────
+      # ECR is AWS's private Docker registry. This action authenticates Docker
+      # so we can push images to it. It also outputs the registry URL we need
+      # for tagging the images.
+      - name: Log in to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Step 4: Build and push the API image ───────────────────────────────
+      # Builds the .NET API Docker image from the repo root (build context needed
+      # because the Dockerfile also copies the data/ folder for seeding).
+      # Tags it with :latest and pushes to our ECR repository.
+      - name: Build and push API image
+        run: |
+          docker build \
+            -f src/WristWise.API/Dockerfile \
+            -t ${{ secrets.ECR_API_URL }}:latest \
+            .
+          docker push ${{ secrets.ECR_API_URL }}:latest
+
+      # ── Step 5: Build and push the Client image ────────────────────────────
+      # Same process for the React frontend. Vite builds the static files,
+      # then they get served by nginx inside the container.
+      - name: Build and push Client image
+        run: |
+          docker build \
+            -f src/WristWise.Client/Dockerfile \
+            -t ${{ secrets.ECR_CLIENT_URL }}:latest \
+            .
+          docker push ${{ secrets.ECR_CLIENT_URL }}:latest
+
+      # ── Step 6: Copy config files to the server ────────────────────────────
+      # SCPs docker-compose.yml and nginx.conf to /app on the EC2 instance.
+      # The server needs these to know how to run the containers.
+      - name: Copy config files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.yml,nginx.conf"
+          target: /app
+
+      # ── Step 7: Deploy ─────────────────────────────────────────────────────
+      # SSHs into the EC2 instance and:
+      #   1. Writes the .env file from GitHub Secrets (never stored in git)
+      #   2. Logs Docker into ECR so it can pull the new images
+      #   3. Pulls the latest images we just pushed
+      #   4. Restarts the containers with zero-downtime (--remove-orphans cleans
+      #      up any containers from services that no longer exist)
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /app
+
+            # Write secrets to .env — this file is never committed to git
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" > .env
+            echo "JWT_KEY=${{ secrets.JWT_KEY }}" >> .env
+            echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env
+            echo "API_IMAGE=${{ secrets.ECR_API_URL }}:latest" >> .env
+            echo "CLIENT_IMAGE=${{ secrets.ECR_CLIENT_URL }}:latest" >> .env
+
+            # Log Docker into ECR — the EC2 IAM role handles the AWS auth,
+            # so no AWS keys are needed on the server itself
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+              | docker login --username AWS --password-stdin \
+                $(echo ${{ secrets.ECR_API_URL }} | cut -d'/' -f1)
+
+            # Pull the new images and restart containers
+            docker compose pull
+            docker compose up -d --remove-orphans

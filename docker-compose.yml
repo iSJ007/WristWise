@@ -1,0 +1,54 @@
+services:
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - client
+    restart: unless-stopped
+
+  api:
+    # In production API_IMAGE is set to the ECR URL in .env
+    # Locally it falls back to building from source
+    image: ${API_IMAGE:-wristwise-api:latest}
+    build:
+      context: .
+      dockerfile: src/WristWise.API/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=wristwise;Username=wristwise;Password=${DB_PASSWORD}
+      - Jwt__Key=${JWT_KEY}
+      - AdminSeed__Password=${ADMIN_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    image: ${CLIENT_IMAGE:-wristwise-client:latest}
+    build:
+      context: .
+      dockerfile: src/WristWise.Client/Dockerfile
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=wristwise
+      - POSTGRES_USER=wristwise
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wristwise"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

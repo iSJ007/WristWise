@@ -33,8 +33,9 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Create an account</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
-            <label className="text-sm text-gray-600 block mb-1">Username</label>
+            <label htmlFor="username" className="text-sm text-gray-600 block mb-1">Username</label>
             <input
+              id="username"
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
@@ -43,8 +44,9 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-gray-600 block mb-1">Email</label>
+            <label htmlFor="email" className="text-sm text-gray-600 block mb-1">Email</label>
             <input
+              id="email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -53,12 +55,14 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-gray-600 block mb-1">Password</label>
+            <label htmlFor="password" className="text-sm text-gray-600 block mb-1">Password</label>
             <input
+              id="password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
+              minLength={6}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
             />
           </div>
