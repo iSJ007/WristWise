@@ -129,6 +129,11 @@ resource "aws_instance" "app" {
   iam_instance_profile   = aws_iam_instance_profile.ec2.name
   subnet_id              = data.aws_subnets.default.ids[0]
 
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
+
   # Runs once on first boot — installs Docker and Docker Compose
   user_data = <<-EOF
     #!/bin/bash
