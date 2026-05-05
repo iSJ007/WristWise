@@ -12,14 +12,16 @@ PostgreSQL container (internal only)
 
 ## Prerequisites
 
-- AWS account with programmatic access
-- Terraform installed locally
-- Docker installed locally (for testing)
-- GitHub repo with Actions enabled
+- AWS account with programmatic access (an IAM user with programmatic credentials)
+- Terraform installed locally — [download here](https://developer.hashicorp.com/terraform/downloads)
+- Docker Desktop installed locally (for testing before you deploy)
+- A GitHub repo with Actions enabled
 
 ## First-time setup
 
 ### 1. Provision infrastructure
+
+This step creates everything on AWS — the server, the database, the image registry, all of it.
 
 ```bash
 cd terraform
@@ -27,50 +29,54 @@ terraform init
 terraform apply
 ```
 
-Terraform creates the EC2 instance, Elastic IP, security group, ECR repositories, and an SSH key pair. When it finishes, grab the outputs:
+Terraform will show you a list of what it's about to create and ask you to confirm. Type `yes`. It takes about 2 minutes.
+
+When it finishes, run these commands to get the values you'll need for the next step:
 
 ```bash
-terraform output server_ip          # → EC2_HOST secret
-terraform output api_ecr_url        # → ECR_API_URL secret
-terraform output client_ecr_url     # → ECR_CLIENT_URL secret
-terraform output -raw ssh_private_key  # → EC2_SSH_KEY secret
+terraform output server_ip              # the public IP of your server → EC2_HOST
+terraform output api_ecr_url            # where to push the API Docker image → ECR_API_URL
+terraform output client_ecr_url         # where to push the frontend image → ECR_CLIENT_URL
+terraform output -raw ssh_private_key   # the SSH key to access the server → EC2_SSH_KEY
 ```
 
-The EC2 instance bootstraps itself on first boot — it installs Docker, Docker Compose, and creates `/app`. This takes about 2 minutes. You can SSH in to check: `ssh -i key.pem ec2-user@<server_ip>`.
+The EC2 instance runs a setup script on first boot that installs Docker and creates the `/app` folder. This takes about 2 minutes after the instance starts. You can SSH in to check: `ssh -i key.pem ec2-user@<server_ip>`.
 
 ### 2. Add GitHub Secrets
 
-Go to your repo → Settings → Secrets and variables → Actions, and add:
+GitHub Secrets are how you pass sensitive values to the deployment pipeline without putting them in the code. Go to your repo → **Settings** → **Secrets and variables** → **Actions**, then add each of these:
 
-| Secret | Value |
+| Secret | Where to get it |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | Your AWS access key |
-| `AWS_SECRET_ACCESS_KEY` | Your AWS secret key |
+| `AWS_ACCESS_KEY_ID` | Your IAM user's access key |
+| `AWS_SECRET_ACCESS_KEY` | Your IAM user's secret key |
 | `EC2_HOST` | From `terraform output server_ip` |
 | `EC2_SSH_KEY` | From `terraform output -raw ssh_private_key` |
 | `ECR_API_URL` | From `terraform output api_ecr_url` |
 | `ECR_CLIENT_URL` | From `terraform output client_ecr_url` |
-| `DB_PASSWORD` | Pick a strong password |
-| `JWT_KEY` | Random string, 32+ characters |
-| `ADMIN_PASSWORD` | Password for the admin account |
+| `DB_PASSWORD` | Pick a strong password for the database |
+| `JWT_KEY` | Any random string, at least 32 characters |
+| `ADMIN_PASSWORD` | The password for the admin account |
 
 ### 3. Push to main
 
-Once secrets are set, push to `main`. GitHub Actions will build the images, push them to ECR, SSH into the server, write the `.env` file, and start the containers. First deploy takes 3-5 minutes.
+Once the secrets are in place, push to `main`. GitHub Actions will take it from there — build the images, push them to ECR, SSH into the server, write the `.env` file, and start the containers.
 
-## CI/CD flow
+The first deploy takes 3-5 minutes. After that, the app is live at `http://<server_ip>`.
 
-Every push to `main`:
+## What happens on every deploy
 
-1. Builds the API Docker image (from `src/WristWise.API/Dockerfile`)
-2. Builds the Client Docker image (from `src/WristWise.Client/Dockerfile`)
-3. Pushes both to ECR
-4. SSHs into the EC2 instance
-5. Writes `.env` from GitHub Secrets
-6. Clones/pulls the repo to `/app`
-7. Runs `docker compose pull && docker compose up -d`
+Every push to `main` triggers this sequence automatically:
 
-The app is live at `http://<server_ip>` within a minute of the workflow finishing.
+1. Build the API Docker image and push it to ECR
+2. Build the frontend Docker image and push it to ECR
+3. Copy `docker-compose.yml` and `nginx.conf` to the server
+4. SSH into the server
+5. Write the `.env` file from GitHub Secrets (this file is never stored in git)
+6. Pull the new images from ECR
+7. Restart the containers with the new images
+
+The whole thing takes about 2-3 minutes. The app stays up during the pull — it only goes down for a few seconds when the containers restart.
 
 ## Running locally with Docker
 
@@ -78,21 +84,20 @@ To test the full Docker setup on your machine before pushing:
 
 ```bash
 cp .env.example .env
-# fill in .env with real values
-
+# open .env and fill in real values
 docker compose up --build
 ```
 
-Visit `http://localhost`. The setup is identical to production.
+Visit `http://localhost`. This is the same setup as production — nginx in front, API and frontend behind it, PostgreSQL in a container.
 
 ## Infrastructure overview
 
-| Resource | Purpose | Cost |
+| Resource | What it's for | Monthly cost |
 |---|---|---|
-| EC2 t3.micro | Runs all containers | ~$7.50/mo |
-| Elastic IP | Fixed public IP | Free while attached |
-| ECR (x2) | Stores Docker images | Free under 500MB |
-| PostgreSQL (Docker) | Database | Included in EC2 |
+| EC2 t3.micro | Runs all four containers | ~$7.50 |
+| Elastic IP | Gives the server a fixed public IP | Free while attached |
+| ECR (×2) | Stores the Docker images | Free under 500MB |
+| PostgreSQL | Database, running inside Docker on the EC2 | Included |
 | **Total** | | **~$8/mo** |
 
 ## Useful commands
@@ -102,38 +107,38 @@ SSH into the server:
 ssh -i key.pem ec2-user@<server_ip>
 ```
 
-Check running containers:
+Check what's running:
 ```bash
 docker compose ps
 ```
 
-View API logs:
+Follow the API logs:
 ```bash
 docker compose logs api -f
 ```
 
-Restart a single container:
+Restart one container without touching the others:
 ```bash
 docker compose restart api
 ```
 
-Tear down everything (data is preserved in the postgres volume):
+Shut everything down (data is preserved in the postgres volume):
 ```bash
 docker compose down
 ```
 
-To also wipe the database:
+Shut down and wipe the database too:
 ```bash
 docker compose down -v
 ```
 
-## Destroying infrastructure
+## Destroying everything
 
-When you're done with the app, run this to avoid ongoing charges:
+When you're done and want to stop paying for AWS resources:
 
 ```bash
 cd terraform
 terraform destroy
 ```
 
-This removes the EC2 instance, Elastic IP, ECR repos, and everything else Terraform created. The EBS volume (and your data) goes with it.
+This removes the EC2 instance, Elastic IP, ECR repos, and everything else Terraform created. The EBS volume (and your data) goes with it — there's no undo.

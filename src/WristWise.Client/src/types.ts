@@ -54,6 +54,15 @@ export interface WishlistItem {
 export interface AuthUser {
   userId: number;
   username: string;
+  isAdmin: boolean;
+}
+
+export interface UserSummary {
+  id: number;
+  username: string;
+  email: string;
+  isAdmin: boolean;
+  createdAt: string;
 }
 
 export interface BrowseResult {

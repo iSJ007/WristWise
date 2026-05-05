@@ -28,6 +28,11 @@ export default function Navbar() {
               <Link to="/wishlist" className="text-gray-300 hover:text-white transition-colors">
                 Wishlist
               </Link>
+              {user.isAdmin && (
+                <Link to="/admin" className="text-gray-300 hover:text-white transition-colors">
+                  Admin
+                </Link>
+              )}
               <span className="text-gray-400">Hi, {user.username}</span>
               <button
                 onClick={handleLogout}

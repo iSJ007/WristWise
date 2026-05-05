@@ -1,8 +1,10 @@
 # Frontend
 
-React 19, Vite, TypeScript, Tailwind CSS v4. The dev server proxies `/api` requests to the .NET backend so you don't need to touch CORS during development.
+The frontend is a React app built with Vite and TypeScript, styled with Tailwind CSS. It talks to the .NET backend through a set of simple fetch functions. During development, Vite automatically forwards any `/api` request to the backend for you — so you never have to worry about CORS or switching URLs between local and production.
 
 ## Getting started
+
+Make sure the backend API is running first (see [backend.md](backend.md)), then:
 
 ```bash
 cd src/WristWise.Client
@@ -10,61 +12,76 @@ npm install
 npm run dev
 ```
 
-Runs at `http://localhost:5173`. Make sure the API is also running or you'll get network errors on every page.
+Open `http://localhost:5173`. If you skip starting the backend, the pages will load but every data request will fail with a network error.
 
-## Folder structure
+## How the code is organised
 
 ```
 src/
-  api/          fetch functions, one file per resource
-  components/   small reusable bits (Navbar, WatchCard, StarRating)
-  context/      AuthContext — handles login state
-  pages/        one component per route
-  types.ts      TypeScript interfaces matching the API DTOs
-  index.css     Tailwind import (that's literally all that's in it)
+  api/          all the functions that call the backend, grouped by feature
+  components/   small pieces used across multiple pages (Navbar, WatchCard, StarRating)
+  context/      AuthContext — keeps track of who's logged in
+  pages/        one file per page/route
+  types.ts      TypeScript types that match what the API sends back
+  index.css     just the Tailwind import, nothing else
 ```
 
-## API layer
+The pattern is: a page needs data → it calls a function from `api/` → that function calls `apiFetch` in `client.ts` → the response comes back typed.
 
-Everything that talks to the backend lives in `src/api/`. There's a single `client.ts` file that all the others go through:
+## Calling the API
+
+Every network call goes through `src/api/client.ts`. It handles two things automatically:
+- Attaches the user's JWT token if they're logged in
+- Throws a proper error if the server returns a non-2xx response
 
 ```ts
-// client.ts picks up the JWT from localStorage and attaches it automatically
 apiFetch<T>(path, options)
 ```
 
-If you need a new endpoint, add a function to the relevant file (`watches.ts`, `reviews.ts`, etc.) and call `apiFetch` directly. No axios, no React Query — just fetch.
+You never call this directly from a page. Instead, each feature has its own file in `api/`:
 
-The Vite proxy in `vite.config.ts` forwards any request starting with `/api` to `http://localhost:5287`, so the same relative URLs work in both dev and production.
+| File | What it covers |
+|---|---|
+| `auth.ts` | login, register |
+| `watches.ts` | browse, search, get by ID |
+| `reviews.ts` | get reviews, post, delete |
+| `wishlist.ts` | get wishlist, add, remove |
+| `admin.ts` | list users, reset passwords |
+
+If you need to add a new API call, add a function to the right file and call `apiFetch` inside it.
+
+The Vite dev config (`vite.config.ts`) proxies all `/api` requests to `http://localhost:5287` locally. In production, nginx handles the same routing. Your code never needs to know which environment it's in.
 
 ## Auth
 
-`AuthContext` stores the current user and JWT token in `localStorage`. Wrap anything that needs auth with `useAuth()`:
+Login state lives in `AuthContext`. It stores the current user object and JWT token in `localStorage` so they survive a page refresh.
 
 ```ts
 const { user, token, login, logout } = useAuth();
 ```
 
-`user` is `null` when logged out. `token` is the raw JWT string. The `login()` function saves both to localStorage and updates state. `logout()` clears them.
-
-The token is automatically attached to every `apiFetch` call, so you don't need to pass it manually anywhere.
+- `user` is `null` when no one is logged in, otherwise it has `userId`, `username`, and `isAdmin`
+- `login(user, token)` saves both to localStorage and updates the app state
+- `logout()` clears everything
+- The token is attached automatically by `apiFetch` — you don't pass it manually anywhere
 
 ## Pages
 
-| Route | Page | Notes |
+| Route | Page | What it does |
 |---|---|---|
-| `/` | BrowsePage | Search + paginated grid |
-| `/watches/:id` | WatchDetailPage | Specs, wishlist, reviews |
+| `/` | BrowsePage | Search bar + paginated grid of watches |
+| `/watches/:id` | WatchDetailPage | Full watch details, wishlist button, reviews |
 | `/login` | LoginPage | |
 | `/register` | RegisterPage | |
-| `/wishlist` | WishlistPage | Redirects to login if not authenticated |
+| `/wishlist` | WishlistPage | Your saved watches — redirects to login if not signed in |
+| `/admin` | AdminPage | User list + password reset — redirects away if not admin |
 
-## A few things worth knowing
+To add a new page: create a file in `pages/`, then add a `<Route>` for it in `App.tsx`.
 
-**Search** uses a 350ms debounce and an `AbortController` to cancel in-flight requests when the user keeps typing. This prevents stale results appearing out of order.
+## Things worth knowing
 
-**Watch images** cycle through `watch1.png` to `watch8.png` in `/public` using `id % 8`. If you add more images, update the `8` in `WatchCard.tsx` and `WatchDetailPage.tsx`.
+**Search debouncing** — the search input waits 350ms after you stop typing before sending a request. It also cancels any request that's already in-flight when you type again. This prevents an older slow request from overwriting a newer fast one.
 
-**Star ratings** stay amber (`text-amber-400`) even though the rest of the brand colour is teal. That was intentional — gold stars are universal and amber reads better than teal for ratings.
+**Watch images** — there are 8 images (`watch1.png` to `watch8.png`) in `/public`. They're assigned to watches by doing `id % 8`, so every watch gets an image and they cycle evenly. If you add more images, update the `8` in `WatchCard.tsx` and `WatchDetailPage.tsx`.
 
-**React Router** is v7. If you add a new page, register the route in `App.tsx`.
+**Star ratings** are amber instead of teal. That was a deliberate choice — gold stars are a universal pattern and amber reads better visually for ratings.

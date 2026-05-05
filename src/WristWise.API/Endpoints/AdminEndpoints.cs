@@ -4,13 +4,27 @@ using WristWise.API.Data;
 namespace WristWise.API.Endpoints;
 
 public record ResetPasswordRequest(string NewPassword);
+public record UserSummary(int Id, string Username, string Email, bool IsAdmin, DateTime CreatedAt);
 
 public static class AdminEndpoints
 {
     public static void MapAdminEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/admin/users", GetUsers)
+           .RequireAuthorization("AdminOnly");
+
         app.MapPut("/api/admin/users/{userId}/reset-password", ResetPassword)
            .RequireAuthorization("AdminOnly");
+    }
+
+    static async Task<IResult> GetUsers(AppDbContext db)
+    {
+        var users = await db.Users
+            .OrderBy(u => u.Username)
+            .Select(u => new UserSummary(u.Id, u.Username, u.Email, u.IsAdmin, u.CreatedAt))
+            .ToListAsync();
+
+        return Results.Ok(users);
     }
 
     static async Task<IResult> ResetPassword(int userId, ResetPasswordRequest req, AppDbContext db)
