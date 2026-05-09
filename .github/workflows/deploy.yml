@@ -80,7 +80,7 @@ jobs:
             echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env
             echo "API_IMAGE=${{ env.IMAGE }}" >> .env
 
-            # Clear any stale credentials, then pull the public image
-            docker logout ghcr.io || true
+            # Log in to ghcr.io, then pull the image
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull
             docker compose up -d --remove-orphans
