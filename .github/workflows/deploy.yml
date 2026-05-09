@@ -16,7 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Step 2: Log in to GitHub Container Registry 
+      # ── Step 2: Compute lowercase image name ──────────────────────────────
+      # Docker requires all image names to be lowercase.
+      - name: Set image name
+        run: echo "IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/wristwise-api:latest" >> $GITHUB_ENV
+
+      # ── Step 3: Log in to GitHub Container Registry
       # Uses the built-in GITHUB_TOKEN — no extra secrets needed for the push.
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -25,17 +30,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Step 3: Build and push the API image 
+      # ── Step 4: Build and push the API image
       # Builds from the repo root so the Dockerfile can also copy data/ for seeding.
       - name: Build and push API image
         run: |
           docker build \
             -f src/WristWise.API/Dockerfile \
-            -t ghcr.io/${{ github.repository_owner }}/wristwise-api:latest \
+            -t ${{ env.IMAGE }} \
             .
-          docker push ghcr.io/${{ github.repository_owner }}/wristwise-api:latest
+          docker push ${{ env.IMAGE }}
 
-      # ── Step 4: Build the React frontend 
+      # ── Step 5: Build the React frontend 
       # Produces a dist/ folder of static files. Nginx on the server serves
       # these directly — no separate client container needed.
       - name: Build frontend
@@ -45,7 +50,7 @@ jobs:
           npm run build
           mv dist ../../dist
 
-      # ── Step 5: Copy config and built frontend to the server 
+      # ── Step 6: Copy config and built frontend to the server 
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -55,7 +60,7 @@ jobs:
           source: "docker-compose.yml,nginx.conf,dist"
           target: /app
 
-      # ── Step 6: Deploy 
+      # ── Step 7: Deploy 
       # SSHs into the server and:
       #   1. Writes the .env file from GitHub Secrets (never stored in git)
       #   2. Logs Docker into ghcr.io so it can pull the API image
@@ -73,7 +78,7 @@ jobs:
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" > .env
             echo "JWT_KEY=${{ secrets.JWT_KEY }}" >> .env
             echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env
-            echo "API_IMAGE=ghcr.io/${{ github.repository_owner }}/wristwise-api:latest" >> .env
+            echo "API_IMAGE=${{ env.IMAGE }}" >> .env
 
             # Log Docker into ghcr.io to pull the API image
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
