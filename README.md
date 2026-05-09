@@ -32,8 +32,7 @@
 - GitHub Actions CI/CD
 - GitHub Container Registry (`ghcr.io`)
 
-
-##Images
+## Images
 
 <img width="700" alt="WristWiseregister" src="https://github.com/user-attachments/assets/d5b9b90d-7ae0-4a3a-8e16-8c9899b6f1be" />
 
