@@ -58,6 +58,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
     await DataSeeder.SeedAdminAsync(db, app.Configuration);
+    await DataSeeder.SeedUsersAsync(db);
     await DataSeeder.SeedWatchesAsync(db, app.Configuration);
 }
 

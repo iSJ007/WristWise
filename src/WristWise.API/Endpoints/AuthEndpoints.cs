@@ -38,7 +38,7 @@ public static class AuthEndpoints
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == req.Email.ToLower());
 
         if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
-            return Results.Unauthorized();
+            return Results.Problem("Incorrect email or password.", statusCode: 401);
 
         return Results.Ok(new AuthResponse(user.Id, user.Username, user.IsAdmin, tokens.CreateToken(user)));
     }

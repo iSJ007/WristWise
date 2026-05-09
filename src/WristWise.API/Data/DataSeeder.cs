@@ -28,6 +28,26 @@ public static class DataSeeder
         Console.WriteLine($"Admin user created: {admin.Email}");
     }
 
+    public static async Task SeedUsersAsync(AppDbContext db)
+    {
+        var users = new[]
+        {
+            new User { Username = "asharma",  Email = "asharma@wristwise.com",  PasswordHash = BCrypt.Net.BCrypt.HashPassword("User@1234"), IsAdmin = false },
+            new User { Username = "rkrishnan", Email = "rkrishnan@wristwise.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("User@1234"), IsAdmin = false },
+        };
+
+        foreach (var user in users)
+        {
+            if (!await db.Users.AnyAsync(u => u.Email == user.Email))
+            {
+                db.Users.Add(user);
+                Console.WriteLine($"User created: {user.Email}");
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
     public static async Task SeedWatchesAsync(AppDbContext db, IConfiguration config)
     {
         if (db.Watches.Any()) return;

@@ -1,27 +1,28 @@
 # Deployment
 
-The app runs on a single EC2 t3.micro (~$8/month) with four Docker containers managed by Docker Compose. Infrastructure is provisioned with Terraform. GitHub Actions handles building, pushing, and deploying on every push to `main`.
+The app runs on a single EC2 t3.micro. Everything is containerised with Docker Compose, infrastructure is provisioned with Terraform, and GitHub Actions handles the full build and deploy on every push to `main`.
 
 ```
 nginx (port 80)
   ├── /api/*  →  .NET API container
-  └── /*      →  React (nginx) container
+  └── /*      →  React static files (served directly by nginx)
 
 PostgreSQL container (internal only)
 ```
 
-## Prerequisites
+The React app gets built at deploy time and its output files are served by nginx directly — no separate frontend container needed.
 
-- AWS account with programmatic access (an IAM user with programmatic credentials)
+## What you need before starting
+
+- An AWS account with an IAM user that has programmatic access
 - Terraform installed locally — [download here](https://developer.hashicorp.com/terraform/downloads)
-- Docker Desktop installed locally (for testing before you deploy)
 - A GitHub repo with Actions enabled
 
 ## First-time setup
 
-### 1. Provision infrastructure
+### 1. Provision the server
 
-This step creates everything on AWS — the server, the database, the image registry, all of it.
+Run Terraform from the `terraform/` folder. It creates everything — the EC2 instance, a fixed public IP, the security group, and SSH keys.
 
 ```bash
 cd terraform
@@ -29,76 +30,64 @@ terraform init
 terraform apply
 ```
 
-Terraform will show you a list of what it's about to create and ask you to confirm. Type `yes`. It takes about 2 minutes.
+Terraform will show you what it's about to create and ask you to confirm. Type `yes`. It takes about 2 minutes.
 
-When it finishes, run these commands to get the values you'll need for the next step:
+Once it's done, grab the values you'll need for GitHub Secrets:
 
 ```bash
-terraform output server_ip              # the public IP of your server → EC2_HOST
-terraform output api_ecr_url            # where to push the API Docker image → ECR_API_URL
-terraform output client_ecr_url         # where to push the frontend image → ECR_CLIENT_URL
-terraform output -raw ssh_private_key   # the SSH key to access the server → EC2_SSH_KEY
+terraform output server_ip            # → EC2_HOST
+terraform output -raw ssh_private_key # → EC2_SSH_KEY
 ```
 
-The EC2 instance runs a setup script on first boot that installs Docker and creates the `/app` folder. This takes about 2 minutes after the instance starts. You can SSH in to check: `ssh -i key.pem ec2-user@<server_ip>`.
+The server runs a setup script on first boot that installs Docker. Give it 2 minutes after the instance starts before you deploy.
 
-### 2. Add GitHub Secrets
+### 2. Create a GitHub Personal Access Token
 
-GitHub Secrets are how you pass sensitive values to the deployment pipeline without putting them in the code. Go to your repo → **Settings** → **Secrets and variables** → **Actions**, then add each of these:
+The server needs to pull the API Docker image from GitHub Container Registry. Go to **GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)** and create a token with the `read:packages` scope. Save it — you'll need it in the next step.
+
+> If your repo is public, images are public too and the server can pull without a token. In that case you can skip this step and remove the `GHCR_TOKEN` login line from `deploy.yml`.
+
+### 3. Add GitHub Secrets
+
+Go to your repo → **Settings → Secrets and variables → Actions** and add these:
 
 | Secret | Where to get it |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | Your IAM user's access key |
-| `AWS_SECRET_ACCESS_KEY` | Your IAM user's secret key |
 | `EC2_HOST` | From `terraform output server_ip` |
 | `EC2_SSH_KEY` | From `terraform output -raw ssh_private_key` |
-| `ECR_API_URL` | From `terraform output api_ecr_url` |
-| `ECR_CLIENT_URL` | From `terraform output client_ecr_url` |
-| `DB_PASSWORD` | Pick a strong password for the database |
+| `GHCR_TOKEN` | The personal access token you just created |
+| `DB_PASSWORD` | Pick any strong password for the database |
 | `JWT_KEY` | Any random string, at least 32 characters |
-| `ADMIN_PASSWORD` | The password for the admin account |
+| `ADMIN_PASSWORD` | Password for the admin account |
 
-### 3. Push to main
+### 4. Push to main
 
-Once the secrets are in place, push to `main`. GitHub Actions will take it from there — build the images, push them to ECR, SSH into the server, write the `.env` file, and start the containers.
-
-The first deploy takes 3-5 minutes. After that, the app is live at `http://<server_ip>`.
+Once the secrets are in, push to `main`. GitHub Actions handles the rest. The first deploy takes 3–5 minutes, then the app is live at `http://<server_ip>`.
 
 ## What happens on every deploy
 
-Every push to `main` triggers this sequence automatically:
+Every push to `main` triggers this automatically:
 
-1. Build the API Docker image and push it to ECR
-2. Build the frontend Docker image and push it to ECR
-3. Copy `docker-compose.yml` and `nginx.conf` to the server
-4. SSH into the server
-5. Write the `.env` file from GitHub Secrets (this file is never stored in git)
-6. Pull the new images from ECR
-7. Restart the containers with the new images
+1. Log in to GitHub Container Registry using the built-in `GITHUB_TOKEN`
+2. Build the .NET API Docker image and push it to `ghcr.io`
+3. Build the React app with `npm run build` — produces a folder of static files
+4. Copy `docker-compose.yml`, `nginx.conf`, and the built frontend to the server
+5. SSH into the server, write the `.env` file from GitHub Secrets, pull the new API image, restart the containers
 
-The whole thing takes about 2-3 minutes. The app stays up during the pull — it only goes down for a few seconds when the containers restart.
+The whole thing takes 2–3 minutes. The app stays up while pulling the new image — only a few seconds of downtime when the containers actually restart.
 
-## Running locally with Docker
 
-To test the full Docker setup on your machine before pushing:
 
-```bash
-cp .env.example .env
-# open .env and fill in real values
-docker compose up --build
-```
+## Infrastructure
 
-Visit `http://localhost`. This is the same setup as production — nginx in front, API and frontend behind it, PostgreSQL in a container.
-
-## Infrastructure overview
-
-| Resource | What it's for | Monthly cost |
+| Resource | Purpose | Monthly cost |
 |---|---|---|
-| EC2 t3.micro | Runs all four containers | ~$7.50 |
-| Elastic IP | Gives the server a fixed public IP | Free while attached |
-| ECR (×2) | Stores the Docker images | Free under 500MB |
-| PostgreSQL | Database, running inside Docker on the EC2 | Included |
+| EC2 t3.micro | Runs all three containers | ~$7.50 |
+| Elastic IP | Gives the server a stable public IP | Free while attached |
+| PostgreSQL | Database, running inside Docker | Included |
 | **Total** | | **~$8/mo** |
+
+Docker images are stored in GitHub Container Registry (ghcr.io) — free for public repos, and free up to 500MB for private ones.
 
 ## Useful commands
 
@@ -127,18 +116,18 @@ Shut everything down (data is preserved in the postgres volume):
 docker compose down
 ```
 
-Shut down and wipe the database too:
+Wipe the database too:
 ```bash
 docker compose down -v
 ```
 
-## Destroying everything
+## Tearing everything down
 
-When you're done and want to stop paying for AWS resources:
+When you're done and want to stop paying for AWS:
 
 ```bash
 cd terraform
 terraform destroy
 ```
 
-This removes the EC2 instance, Elastic IP, ECR repos, and everything else Terraform created. The EBS volume (and your data) goes with it — there's no undo.
+This removes the EC2 instance, Elastic IP, and everything else Terraform created. Your data goes with it — there's no undo.

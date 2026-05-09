@@ -1,83 +1,65 @@
 name: Deploy
 
-# Runs on every push to main — this is the only branch that deploys
 on:
   push:
     branches: [main]
 
-env:
-  AWS_REGION: us-east-1
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # needed to push to ghcr.io
 
     steps:
-      # ── Step 1: Get the code ───────────────────────────────────────────────
-      # Checks out the repo so the rest of the steps can see the files
+      # ── Step 1: Get the code 
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Step 2: AWS credentials ────────────────────────────────────────────
-      # Configures the AWS CLI using the keys stored in GitHub Secrets.
-      # Every step after this one can talk to AWS.
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      # ── Step 2: Log in to GitHub Container Registry 
+      # Uses the built-in GITHUB_TOKEN — no extra secrets needed for the push.
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Step 3: Log in to ECR ──────────────────────────────────────────────
-      # ECR is AWS's private Docker registry. This action authenticates Docker
-      # so we can push images to it. It also outputs the registry URL we need
-      # for tagging the images.
-      - name: Log in to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      # ── Step 4: Build and push the API image ───────────────────────────────
-      # Builds the .NET API Docker image from the repo root (build context needed
-      # because the Dockerfile also copies the data/ folder for seeding).
-      # Tags it with :latest and pushes to our ECR repository.
+      # ── Step 3: Build and push the API image 
+      # Builds from the repo root so the Dockerfile can also copy data/ for seeding.
       - name: Build and push API image
         run: |
           docker build \
             -f src/WristWise.API/Dockerfile \
-            -t ${{ secrets.ECR_API_URL }}:latest \
+            -t ghcr.io/${{ github.repository_owner }}/wristwise-api:latest \
             .
-          docker push ${{ secrets.ECR_API_URL }}:latest
+          docker push ghcr.io/${{ github.repository_owner }}/wristwise-api:latest
 
-      # ── Step 5: Build and push the Client image ────────────────────────────
-      # Same process for the React frontend. Vite builds the static files,
-      # then they get served by nginx inside the container.
-      - name: Build and push Client image
+      # ── Step 4: Build the React frontend 
+      # Produces a dist/ folder of static files. Nginx on the server serves
+      # these directly — no separate client container needed.
+      - name: Build frontend
         run: |
-          docker build \
-            -f src/WristWise.Client/Dockerfile \
-            -t ${{ secrets.ECR_CLIENT_URL }}:latest \
-            .
-          docker push ${{ secrets.ECR_CLIENT_URL }}:latest
+          cd src/WristWise.Client
+          npm ci
+          npm run build
+          mv dist ../../dist
 
-      # ── Step 6: Copy config files to the server ────────────────────────────
-      # SCPs docker-compose.yml and nginx.conf to /app on the EC2 instance.
-      # The server needs these to know how to run the containers.
-      - name: Copy config files to server
+      # ── Step 5: Copy config and built frontend to the server 
+      - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yml,nginx.conf"
+          source: "docker-compose.yml,nginx.conf,dist"
           target: /app
 
-      # ── Step 7: Deploy ─────────────────────────────────────────────────────
-      # SSHs into the EC2 instance and:
+      # ── Step 6: Deploy 
+      # SSHs into the server and:
       #   1. Writes the .env file from GitHub Secrets (never stored in git)
-      #   2. Logs Docker into ECR so it can pull the new images
-      #   3. Pulls the latest images we just pushed
-      #   4. Restarts the containers with zero-downtime (--remove-orphans cleans
-      #      up any containers from services that no longer exist)
+      #   2. Logs Docker into ghcr.io so it can pull the API image
+      #   3. Pulls the latest image and restarts the containers
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -91,15 +73,11 @@ jobs:
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" > .env
             echo "JWT_KEY=${{ secrets.JWT_KEY }}" >> .env
             echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env
-            echo "API_IMAGE=${{ secrets.ECR_API_URL }}:latest" >> .env
-            echo "CLIENT_IMAGE=${{ secrets.ECR_CLIENT_URL }}:latest" >> .env
+            echo "API_IMAGE=ghcr.io/${{ github.repository_owner }}/wristwise-api:latest" >> .env
 
-            # Log Docker into ECR — the EC2 IAM role handles the AWS auth,
-            # so no AWS keys are needed on the server itself
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} \
-              | docker login --username AWS --password-stdin \
-                $(echo ${{ secrets.ECR_API_URL }} | cut -d'/' -f1)
+            # Log Docker into ghcr.io to pull the API image
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Pull the new images and restart containers
+            # Pull the new image and restart containers
             docker compose pull
             docker compose up -d --remove-orphans

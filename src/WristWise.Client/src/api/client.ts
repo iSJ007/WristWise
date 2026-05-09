@@ -10,7 +10,12 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || res.statusText);
+    let message = text || res.statusText;
+    try {
+      const problem = JSON.parse(text);
+      message = problem.detail || problem.title || message;
+    } catch { /* plain text response */ }
+    throw new Error(message);
   }
 
   // Read as text first to safely handle empty bodies (e.g. 201 with no content)

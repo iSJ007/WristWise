@@ -161,20 +161,3 @@ This document outlines the core functional requirements for the **WristWise** we
 * Automated tests for wishlist endpoints pass.
 * Feature is deployed to the production environment.
 
----
-
-### US-09: Watch Image (Optional)
-**As a** visitor,  
-**I want to** see a photo of the watch on its detail page,  
-**So that** I get a visual sense of the timepiece alongside the specs.
-
-**Acceptance Criteria:**
-* A watch image is fetched from an external image API using the brand and model name.
-* If no image is found, a branded placeholder is shown instead.
-* Images load without blocking the rest of the page.
-
-**Definition of Done:**
-* All acceptance criteria are met.
-* Code is reviewed and approved.
-* Image API usage stays within the free tier.
-* Feature is deployed to the production environment.
