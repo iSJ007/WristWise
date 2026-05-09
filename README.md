@@ -31,3 +31,22 @@
 - Terraform (AWS EC2 + Elastic IP)
 - GitHub Actions CI/CD
 - GitHub Container Registry (`ghcr.io`)
+
+
+#Images
+
+<img width="612" height="532" alt="WristWiseregister" src="https://github.com/user-attachments/assets/d5b9b90d-7ae0-4a3a-8e16-8c9899b6f1be" />
+
+<img width="598" height="438" alt="WristWiselogin" src="https://github.com/user-attachments/assets/aa56df2a-7266-49a2-9ca3-44b1b75aecca" />
+
+<img width="1383" height="1034" alt="WristWisebrowse" src="https://github.com/user-attachments/assets/ce38b499-6bab-48cf-a13b-48cc66de7fa5" />
+
+<img width="1387" height="1229" alt="WristWisedetail" src="https://github.com/user-attachments/assets/3ee29dfc-1381-4058-8047-3bf2fd911b76" />
+
+<img width="683" height="237" alt="WristWisewishlist" src="https://github.com/user-attachments/assets/0ee58ac9-f477-4922-b2e7-84e50550a9c2" />
+
+<img width="801" height="400" alt="WristWiseusermanagment" src="https://github.com/user-attachments/assets/d81ae82a-eb89-40b3-979d-0bc075f5c7bc" />
+
+
+
+
